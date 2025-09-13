@@ -1,7 +1,5 @@
--- AXS by Rlyy — stable build (Bring + Kill Aura)
--- Uses Fluent from releases (no 404)
-
--- UI Loader (keep first)
+-- AXS by Rlyy — Bring per-item (One / All) + Kill Aura
+-- Fluent from releases (stable)
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 
 -- Window
@@ -17,9 +15,9 @@ local Window = Fluent:CreateWindow({
 
 -- Tabs
 local Tabs = {
-    Main = Window:AddTab({ Title = "Main", Icon = "home" }),
-    Combat = Window:AddTab({ Title = "Combat", Icon = "swords" }),
-    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
+    Main    = Window:AddTab({ Title = "Main",    Icon = "home" }),
+    Combat  = Window:AddTab({ Title = "Combat",  Icon = "swords" }),
+    Settings= Window:AddTab({ Title = "Settings",Icon = "settings" })
 }
 
 -- Services / refs
@@ -32,49 +30,60 @@ local HRP = Character:WaitForChild("HumanoidRootPart")
 local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents")
 local ToolDamageObject = RemoteEvents:WaitForChild("ToolDamageObject")
 
-----------------------------------------------------------------
--- Bring helpers (simple & reliable: teleport PrimaryPart to you)
-----------------------------------------------------------------
+-- Helpers
+local function getPrimary(model)
+    if not model or not model.Parent then return nil end
+    if model.PrimaryPart then return model.PrimaryPart end
+    local main = model:FindFirstChild("Main")
+    if main and main:IsA("BasePart") then return main end
+    for _, d in ipairs(model:GetDescendants()) do
+        if d:IsA("BasePart") then return d end
+    end
+    return nil
+end
+
 local function tpModelToPlayer(model, offset)
-    if not model or not model.Parent then return end
-    local pp = model.PrimaryPart
-                or model:FindFirstChild("Main")
-                or (function()
-                    for _, d in ipairs(model:GetDescendants()) do
-                        if d:IsA("BasePart") then return d end
-                    end
-                end)()
+    local pp = getPrimary(model)
     if not pp then return end
     pp.CFrame = HRP.CFrame + (offset or Vector3.new(0, 2, 0))
 end
 
--- Bring EXACT name (teleports every matching model)
-local function bringItem(name)
+-- Bring ONE nearest model by exact name
+local function bringOne(name)
+    local nearest, bestDist
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("Model") and obj.Name == name then
-            tpModelToPlayer(obj, Vector3.new( math.random(-3,3), 2, math.random(-3,3) ))
+            local pp = getPrimary(obj)
+            if pp then
+                local dist = (pp.Position - HRP.Position).Magnitude
+                if not bestDist or dist < bestDist then
+                    bestDist = dist
+                    nearest = obj
+                end
+            end
         end
+    end
+    if nearest then
+        tpModelToPlayer(nearest, Vector3.new(0, 2, 0))
     end
 end
 
--- Bring ALL from a list of names
-local function bringAll(list)
+-- Bring ALL models by exact name
+local function bringAllOf(name)
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Model") and table.find(list, obj.Name) then
-            tpModelToPlayer(obj, Vector3.new( math.random(-5,5), 2, math.random(-5,5) ))
+        if obj:IsA("Model") and obj.Name == name then
+            tpModelToPlayer(obj, Vector3.new(math.random(-5,5), 2, math.random(-5,5)))
         end
     end
 end
 
---------------------------------------------------
--- Kill Aura (remote-based, the version that works)
---------------------------------------------------
+-- Kill Aura (remote-based)
 local KillAuraEnabled = false
 local AuraDistance = 200
 
 local function chooseWeapon()
-    -- Prefer inventory tools you actually use; expand if needed
-    local inv = LocalPlayer:WaitForChild("Inventory")
+    local inv = LocalPlayer:FindFirstChild("Inventory")
+    if not inv then return nil end
     return inv:FindFirstChild("Spear")
         or inv:FindFirstChild("Old Axe")
         or inv:FindFirstChild("Good Axe")
@@ -95,7 +104,6 @@ local function killAuraLoop()
                         if mob:IsA("Model") and mob.PrimaryPart then
                             local d = (mob.PrimaryPart.Position - hrp.Position).Magnitude
                             if d <= AuraDistance then
-                                -- UID style that worked: random leading + _ + userid
                                 local uid = tostring(math.random(1,999)) .. "_" .. tostring(LocalPlayer.UserId)
                                 ToolDamageObject:InvokeServer(mob, weapon, uid, hrp.CFrame)
                             end
@@ -108,45 +116,30 @@ local function killAuraLoop()
     end)
 end
 
-----------------
--- Main UI
-----------------
-Tabs.Main:AddSection("Bring (single)")
+-- UI — Bring (One)
+Tabs.Main:AddSection("Bring (one)")
+Tabs.Main:AddButton({ Title = "Bring Log",           Callback = function() bringOne("Log") end })
+Tabs.Main:AddButton({ Title = "Bring Coal",          Callback = function() bringOne("Coal") end })
+Tabs.Main:AddButton({ Title = "Bring Carrot",        Callback = function() bringOne("Carrot") end })
+Tabs.Main:AddButton({ Title = "Bring Rifle",         Callback = function() bringOne("Rifle") end })
+Tabs.Main:AddButton({ Title = "Bring Rifle Ammo",    Callback = function() bringOne("Rifle Ammo") end })
 
-Tabs.Main:AddButton({ Title = "Bring Log",            Description = "Pulls Log(s) to you",            Callback = function() bringItem("Log") end })
-Tabs.Main:AddButton({ Title = "Bring Coal",           Description = "Pulls Coal to you",              Callback = function() bringItem("Coal") end })
-Tabs.Main:AddButton({ Title = "Bring Carrot",         Description = "Pulls Carrot to you",            Callback = function() bringItem("Carrot") end })
-Tabs.Main:AddButton({ Title = "Bring Rifle",          Description = "Pulls Rifle to you",             Callback = function() bringItem("Rifle") end })
-Tabs.Main:AddButton({ Title = "Bring Rifle Ammo",     Description = "Pulls Rifle Ammo to you",        Callback = function() bringItem("Rifle Ammo") end })
-Tabs.Main:AddButton({ Title = "Bring Fuel Canister",  Description = "Pulls Fuel Canister to you",     Callback = function() bringItem("Fuel Canister") end })
+-- UI — Bring (All)
+Tabs.Main:AddSection("Bring (all)")
+Tabs.Main:AddButton({ Title = "Bring Log (ALL)",        Callback = function() bringAllOf("Log") end })
+Tabs.Main:AddButton({ Title = "Bring Coal (ALL)",       Callback = function() bringAllOf("Coal") end })
+Tabs.Main:AddButton({ Title = "Bring Carrot (ALL)",     Callback = function() bringAllOf("Carrot") end })
+Tabs.Main:AddButton({ Title = "Bring Rifle (ALL)",      Callback = function() bringAllOf("Rifle") end })
+Tabs.Main:AddButton({ Title = "Bring Rifle Ammo (ALL)", Callback = function() bringAllOf("Rifle Ammo") end })
 
-Tabs.Main:AddSection("Bring (bulk)")
-
-Tabs.Main:AddButton({
-    Title = "Bring ALL (Logs/Coal/Carrots/Canisters/Ammo/Rifles)",
-    Description = "Teleports all listed items to you",
-    Callback = function()
-        bringAll({
-            "Log","Coal","Carrot","Fuel Canister",
-            "Rifle","Rifle Ammo"
-        })
-    end
-})
-
-----------------
--- Combat UI
-----------------
+-- UI — Combat
 Tabs.Combat:AddSection("Kill Aura")
-
 Tabs.Combat:AddToggle("KillAuraToggle", {
     Title = "Enable Kill Aura",
-    Description = "Attacks nearby mobs using your weapon",
     Default = false,
     Callback = function(state)
         KillAuraEnabled = state
-        if state then
-            killAuraLoop()
-        end
+        if state then killAuraLoop() end
     end
 })
 
@@ -157,14 +150,11 @@ Tabs.Combat:AddSlider("AuraDistance", {
     Min = 25,
     Max = 1000,
     Rounding = 0,
-    Callback = function(val)
-        AuraDistance = val
-    end
+    Callback = function(val) AuraDistance = val end
 })
 
--- Optional toast
 Fluent:Notify({
     Title = "AXS Loaded",
-    Content = "Bring + Kill Aura are ready.",
+    Content = "Per-item Bring (One/All) + Kill Aura ready.",
     Duration = 4
 })
